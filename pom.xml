@@ -10,6 +10,7 @@
     <properties>
         <kafka.home>${basedir}/../kafka</kafka.home>
         <kafka.version>0.9.1.0-SNAPSHOT</kafka.version>
+        <jetty.version>9.3.6.v20151106</jetty.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -54,6 +55,16 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>2.6.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.jetty.websocket</groupId>
+            <artifactId>websocket-api</artifactId>
+            <version>${jetty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.jetty.websocket</groupId>
+            <artifactId>websocket-server</artifactId>
+            <version>${jetty.version}</version>
         </dependency>
     </dependencies>
 
@@ -116,7 +127,7 @@
                             <goal>java</goal>
                         </goals>
                         <configuration>
-                            <mainClass>org.apache.kafka.streams.examples.ProcessorJob</mainClass>
+                            <mainClass>com.martinkl.logserver.Main</mainClass>
                         </configuration>
                     </execution>
                 </executions>
