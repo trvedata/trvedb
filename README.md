@@ -21,6 +21,7 @@ You can then start the ZooKeeper and Kafka services from within the Kafka direct
 
     $ bin/zookeeper-server-start.sh config/zookeeper.properties &
     $ bin/kafka-server-start.sh config/server.properties &
+    $ bin/kafka-topics.sh --zookeeper localhost:2181 --create --topic events --partitions 16 --replication-factor 1
 
 Then you can compile and run this project as follows:
 

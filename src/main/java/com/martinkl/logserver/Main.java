@@ -1,7 +1,9 @@
 package com.martinkl.logserver;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -23,6 +25,10 @@ import org.slf4j.LoggerFactory;
 public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
+    private final StreamStore store;
+    private final Server server;
+
+
     @SuppressWarnings("serial")
     public class RootServlet extends HttpServlet {
         @Override
@@ -36,9 +42,13 @@ public class Main {
 
     public class EventSocket extends WebSocketAdapter {
         private final String streamId;
+        private final String senderId;
+        private int seqNo;
 
-        public EventSocket(String streamId) {
+        public EventSocket(String streamId, String senderId, int initialSeqNo) {
             this.streamId = streamId;
+            this.senderId = senderId;
+            this.seqNo = initialSeqNo;
         }
 
         @Override
@@ -50,9 +60,12 @@ public class Main {
         @Override
         public void onWebSocketBinary(byte[] payload, int offset, int len) {
             super.onWebSocketBinary(payload, offset, len);
-            StringBuilder str = new StringBuilder("Received BINARY message on stream ");
-            str.append(streamId);
-            str.append(":");
+            StreamKey key = new StreamKey(streamId, senderId, seqNo);
+            seqNo++;
+
+            StringBuilder str = new StringBuilder("Received BINARY message: ");
+            str.append(key);
+            str.append(" value =");
             for (int i = 0; i < len; i++) {
                 str.append(' ');
                 int val = payload[offset + i];
@@ -61,6 +74,8 @@ public class Main {
                 str.append(Integer.toHexString(val));
             }
             log.info(str.toString());
+
+            store.publishEvent(key, Arrays.copyOfRange(payload, offset, offset + len));
 
             getSession().getRemote().sendString(str.toString(), new WriteCallback() {
                 @Override
@@ -93,21 +108,36 @@ public class Main {
     }
 
     private class EventSocketCreator implements WebSocketCreator {
+        private final Pattern STREAM_PARAM = Pattern.compile("\\A[0-9a-fA-F]{32}\\z");
+        private final Pattern SENDER_PARAM = Pattern.compile("\\A[0-9a-fA-F]{16}\\z");
+        private final Pattern SEQ_NO_PARAM = Pattern.compile("\\A(0|[1-9][0-9]{0,8})\\z");
+
         @Override
         public Object createWebSocket(ServletUpgradeRequest req, ServletUpgradeResponse resp) {
-            if (!req.getSubProtocols().contains("binary")) {
-                badRequest(resp, "Only binary subprotocol is supported");
+            String streamId = getParameter(req, resp, "stream", STREAM_PARAM);
+            if (streamId == null) return null;
+            String senderId = getParameter(req, resp, "sender", SENDER_PARAM);
+            if (senderId == null) return null;
+            String seqNoStr = getParameter(req, resp, "seqno", SEQ_NO_PARAM);
+            if (seqNoStr == null) return null;
+
+            return new EventSocket(streamId, senderId, Integer.parseInt(seqNoStr));
+        }
+
+        public String getParameter(ServletUpgradeRequest req, ServletUpgradeResponse resp,
+                                   String paramName, Pattern expectedRegex) {
+            List<String> values = req.getParameterMap().get(paramName);
+            if (values == null || values.size() != 1) {
+                badRequest(resp, "Missing query parameter " + paramName);
                 return null;
             }
 
-            resp.setAcceptedSubProtocol("binary");
-            List<String> streamIds = req.getParameterMap().get("stream");
-
-            if (streamIds == null || streamIds.size() != 1) {
-                badRequest(resp, "Missing query parameter: stream");
+            String value = values.get(0);
+            if (!expectedRegex.matcher(value).matches()) {
+                badRequest(resp, "Malformed query parameter " + paramName);
                 return null;
             }
-            return new EventSocket(streamIds.get(0));
+            return value;
         }
 
         private void badRequest(ServletUpgradeResponse resp, String message) {
@@ -128,9 +158,12 @@ public class Main {
         }
     }
 
-    public void run() throws Exception {
-        Server server = new Server(8080);
+    public Main() {
+        this.store = new StreamStore();
+        this.server = new Server(8080);
+    }
 
+    public void run() throws Exception {
         ServletContextHandler handler = new ServletContextHandler(ServletContextHandler.SESSIONS);
         handler.setContextPath("/");
         handler.addServlet(new ServletHolder(new RootServlet()), "/");
@@ -138,7 +171,7 @@ public class Main {
 
         server.setHandler(handler);
         server.start();
-        server.join();
+        store.run();
     }
 
     public static void main(String[] args) throws Exception {
