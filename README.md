@@ -24,7 +24,6 @@ You can then start the ZooKeeper and Kafka services from within the Kafka direct
 
 Then you can compile and run this project as follows:
 
-    $ mvn initialize
     $ mvn package
     $ mvn integration-test
 
