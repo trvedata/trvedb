@@ -11,7 +11,7 @@ import org.eclipse.jetty.websocket.servlet.WebSocketServlet;
 import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.martinkl.logserver.StreamStore;
+import com.martinkl.logserver.storage.StreamStore;
 
 /**
  * Servlet for a HTTP endpoint that can be upgraded to a WebSocket connection.

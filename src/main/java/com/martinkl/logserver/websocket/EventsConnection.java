@@ -9,7 +9,7 @@ import org.eclipse.jetty.websocket.api.WriteCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.martinkl.logserver.StreamKey;
-import com.martinkl.logserver.StreamStore;
+import com.martinkl.logserver.storage.StreamStore;
 
 /**
  * An EventsConnection instance is created for every established WebSocket connection

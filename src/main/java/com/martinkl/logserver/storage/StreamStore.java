@@ -1,4 +1,4 @@
-package com.martinkl.logserver;
+package com.martinkl.logserver.storage;
 
 import java.util.Properties;
 import java.util.concurrent.Future;
@@ -10,8 +10,8 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.martinkl.logserver.StreamKey;
 import com.martinkl.logserver.websocket.ClientConnection;
-import com.martinkl.logserver.websocket.EventsConnection;
 
 public class StreamStore {
 
