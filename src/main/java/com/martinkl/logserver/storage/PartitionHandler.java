@@ -1,9 +1,7 @@
 package com.martinkl.logserver.storage;
 
-import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
@@ -26,13 +24,18 @@ import org.slf4j.LoggerFactory;
 import com.martinkl.logserver.StreamKey;
 import com.martinkl.logserver.websocket.ClientConnection;
 
+/**
+ * A thread that consumes a single partition from Kafka, and maintains all the
+ * streams contained in that partition. Public methods may be called from
+ * anywhere and must therefore be thread-safe.
+ */
 public class PartitionHandler implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(PartitionHandler.class);
     private final TopicPartition topicPartition;
     private final Consumer<StreamKey, byte[]> consumer;
     private final Producer<StreamKey, byte[]> producer;
-    private final ConcurrentMap<String, Set<ClientConnection>> subscribers = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Stream> streams = new ConcurrentHashMap<>();
     private final AtomicBoolean shutdownRequested = new AtomicBoolean(false);
 
     public PartitionHandler(TopicPartition topicPartition, Properties consumerConfig,
@@ -64,9 +67,14 @@ public class PartitionHandler implements Runnable {
             consumer.seekToBeginning(topicPartition); // TODO resume from last offset
 
             while (!shutdownRequested.get()) {
-                ConsumerRecords<StreamKey, byte[]> records = consumer.poll(10000);
+                ConsumerRecords<StreamKey, byte[]> records = consumer.poll(1000);
                 for (ConsumerRecord<StreamKey, byte[]> record : records.records(topicPartition)) {
-                    recordFromKafka(record);
+                    Stream stream = getStream(record.key().getStreamId());
+                    stream.recordFromKafka(record);
+                }
+
+                for (Stream stream : streams.values()) {
+                    stream.pollSubscribers();
                 }
             }
         } catch (WakeupException e) {
@@ -84,26 +92,22 @@ public class PartitionHandler implements Runnable {
     }
 
     public void subscribe(ClientConnection connection) {
-        String streamId = connection.getStreamId();
-        if (!subscribers.containsKey(streamId)) {
-            subscribers.putIfAbsent(streamId, ConcurrentHashMap.newKeySet());
-        }
-        subscribers.get(streamId).add(connection);
+        getStream(connection.getStreamId()).subscribe(connection);
     }
 
     public void unsubscribe(ClientConnection connection) {
-        String streamId = connection.getStreamId();
-        if (subscribers.containsKey(streamId)) {
-            subscribers.get(streamId).remove(connection);
-        }
+        getStream(connection.getStreamId()).unsubscribe(connection);
     }
 
-    private void recordFromKafka(ConsumerRecord<StreamKey, byte[]> record) {
-        String hex = String.format("%0" + (2*record.value().length) + "x", new BigInteger(1, record.value()));
-        log.info("Received from Kafka: {} value={}", record.key().toString(), hex);
+    Stream getStream(String streamId) {
+        if (!streams.containsKey(streamId)) {
+            streams.putIfAbsent(streamId, new Stream(streamId));
+        }
+        return streams.get(streamId);
     }
 
     public void shutdown() {
+        log.info("Shutdown requested for PartitionHandler {}", topicPartition);
         shutdownRequested.set(true);
         consumer.wakeup();
     }
