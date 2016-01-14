@@ -1,4 +1,4 @@
-package com.martinkl.logserver;
+package com.martinkl.logserver.websocket;
 
 import java.util.Arrays;
 import org.eclipse.jetty.websocket.api.Session;
@@ -6,6 +6,8 @@ import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.api.WriteCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.martinkl.logserver.StreamKey;
+import com.martinkl.logserver.StreamStore;
 
 /**
  * An EventsConnection instance is created for every established WebSocket connection
@@ -25,6 +27,22 @@ public class EventsConnection extends WebSocketAdapter {
         this.streamId = streamId;
         this.senderId = senderId;
         this.seqNo = initialSeqNo;
+    }
+
+    public String getStreamId() {
+        return streamId;
+    }
+
+    public String getSenderId() {
+        return senderId;
+    }
+
+    public int getSeqNo() {
+        return seqNo;
+    }
+
+    public StreamKey getStreamKey() {
+        return new StreamKey(streamId, senderId, seqNo);
     }
 
     @Override

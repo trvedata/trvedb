@@ -3,6 +3,7 @@ package com.martinkl.logserver;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
+import com.martinkl.logserver.websocket.EventsServlet;
 
 /**
  * Entry point for running the log server as a standalone process.

@@ -1,4 +1,4 @@
-package com.martinkl.logserver;
+package com.martinkl.logserver.websocket;
 
 import java.io.IOException;
 import java.util.List;
@@ -11,6 +11,7 @@ import org.eclipse.jetty.websocket.servlet.WebSocketServlet;
 import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.martinkl.logserver.StreamStore;
 
 /**
  * Servlet for a HTTP endpoint that can be upgraded to a WebSocket connection.
