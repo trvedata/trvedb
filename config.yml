@@ -1,0 +1,5 @@
+bootstrapServer: localhost:9092
+kafkaTopic: events
+
+server:
+  rootPath: /api/

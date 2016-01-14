@@ -9,7 +9,8 @@
 
     <properties>
         <kafka.version>0.9.0.0</kafka.version>
-        <jetty.version>9.3.6.v20151106</jetty.version>
+        <dropwizard.version>0.9.1</dropwizard.version>
+        <jetty.version>9.2.13.v20150730</jetty.version> <!-- should match version that dropwizard depends on -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -21,19 +22,19 @@
 
     <dependencies>
         <dependency>
+            <groupId>io.dropwizard</groupId>
+            <artifactId>dropwizard-core</artifactId>
+            <version>${dropwizard.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.dropwizard</groupId>
+            <artifactId>dropwizard-assets</artifactId>
+            <version>${dropwizard.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
             <version>${kafka.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>1.6.2</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
-            <version>1.6.2</version>
         </dependency>
         <dependency>
             <groupId>org.rocksdb</groupId>
@@ -82,6 +83,10 @@
                         </goals>
                         <configuration>
                             <mainClass>com.martinkl.logserver.Main</mainClass>
+                            <arguments>
+                                <argument>server</argument>
+                                <argument>config.yml</argument>
+                            </arguments>
                         </configuration>
                     </execution>
                 </executions>

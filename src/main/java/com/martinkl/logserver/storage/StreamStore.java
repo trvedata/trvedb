@@ -2,6 +2,7 @@ package com.martinkl.logserver.storage;
 
 import java.util.Properties;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
@@ -12,8 +13,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.martinkl.logserver.StreamKey;
 import com.martinkl.logserver.websocket.ClientConnection;
+import io.dropwizard.lifecycle.Managed;
 
-public class StreamStore {
+public class StreamStore implements Managed {
 
     public static final String DEFAULT_BOOTSTRAP_SERVER = "localhost:9092";
     public static final String DEFAULT_KAFKA_TOPIC = "events";
@@ -22,6 +24,7 @@ public class StreamStore {
 
     private final PartitionHandler[] handlers;
     private final Producer<StreamKey, byte[]> producer;
+    private Thread[] threads;
 
     public StreamStore() {
         this(null, null, 0, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
@@ -53,14 +56,24 @@ public class StreamStore {
         }
     }
 
-    public void run() {
-        Thread[] threads = new Thread[NUM_PARTITIONS];
+    @Override
+    public void start() throws Exception {
+        threads = new Thread[NUM_PARTITIONS];
         for (int i = 0; i < NUM_PARTITIONS; i++) {
             threads[i] = new Thread(handlers[i]);
             threads[i].start();
         }
         log.info("Started handler threads for {} partitions.", NUM_PARTITIONS);
+    }
 
+    @Override
+    public void stop() throws Exception {
+        for (int i = 0; i < NUM_PARTITIONS; i++) {
+            handlers[i].shutdown();
+        }
+        producer.close(10, TimeUnit.SECONDS);
+
+        if (threads == null) return;
         for (int i = 0; i < NUM_PARTITIONS; i++) {
             try {
                 threads[i].join();
