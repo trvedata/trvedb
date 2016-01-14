@@ -10,6 +10,8 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.martinkl.logserver.websocket.ClientConnection;
+import com.martinkl.logserver.websocket.EventsConnection;
 
 public class StreamStore {
 
@@ -51,11 +53,6 @@ public class StreamStore {
         }
     }
 
-    public Future<RecordMetadata> publishEvent(StreamKey key, byte[] value) {
-        PartitionHandler handler = handlers[key.getPartition()];
-        return handler.publishEvent(key, value);
-    }
-
     public void run() {
         Thread[] threads = new Thread[NUM_PARTITIONS];
         for (int i = 0; i < NUM_PARTITIONS; i++) {
@@ -71,5 +68,22 @@ public class StreamStore {
                 Thread.interrupted();
             }
         }
+    }
+
+    public Future<RecordMetadata> publishEvent(StreamKey key, byte[] value) {
+        PartitionHandler handler = handlers[key.getPartition()];
+        return handler.publishEvent(key, value);
+    }
+
+    public void subscribe(ClientConnection connection) {
+        getHandler(connection).subscribe(connection);
+    }
+
+    public void unsubscribe(ClientConnection connection) {
+        getHandler(connection).unsubscribe(connection);
+    }
+
+    private PartitionHandler getHandler(ClientConnection connection) {
+        return handlers[connection.getStreamKey().getPartition()];
     }
 }

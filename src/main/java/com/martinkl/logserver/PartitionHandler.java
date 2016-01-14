@@ -3,6 +3,9 @@ package com.martinkl.logserver;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -20,6 +23,7 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.martinkl.logserver.websocket.ClientConnection;
 
 public class PartitionHandler implements Runnable {
 
@@ -27,6 +31,7 @@ public class PartitionHandler implements Runnable {
     private final TopicPartition topicPartition;
     private final Consumer<StreamKey, byte[]> consumer;
     private final Producer<StreamKey, byte[]> producer;
+    private final ConcurrentMap<String, Set<ClientConnection>> subscribers = new ConcurrentHashMap<>();
     private final AtomicBoolean shutdownRequested = new AtomicBoolean(false);
 
     public PartitionHandler(TopicPartition topicPartition, Properties consumerConfig,
@@ -75,6 +80,21 @@ public class PartitionHandler implements Runnable {
         ProducerRecord<StreamKey, byte[]> record = new ProducerRecord<>(
                 topicPartition.topic(), topicPartition.partition(), key, value);
         return producer.send(record);
+    }
+
+    public void subscribe(ClientConnection connection) {
+        String streamId = connection.getStreamId();
+        if (!subscribers.containsKey(streamId)) {
+            subscribers.putIfAbsent(streamId, ConcurrentHashMap.newKeySet());
+        }
+        subscribers.get(streamId).add(connection);
+    }
+
+    public void unsubscribe(ClientConnection connection) {
+        String streamId = connection.getStreamId();
+        if (subscribers.containsKey(streamId)) {
+            subscribers.get(streamId).remove(connection);
+        }
     }
 
     private void recordFromKafka(ConsumerRecord<StreamKey, byte[]> record) {
