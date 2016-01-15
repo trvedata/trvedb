@@ -1,13 +1,12 @@
 package com.martinkl.logserver.storage;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.rocksdb.RocksDBException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.martinkl.logserver.StreamKey;
@@ -23,10 +22,12 @@ public class Stream {
     private static final Logger log = LoggerFactory.getLogger(Stream.class);
     private final ConcurrentMap<ClientConnection, Long> subscriberOffsets = new ConcurrentHashMap<>();
     private final String streamId;
+    private final ColumnFamily<StreamKey, byte[]> messageStore;
     private final List<ConsumerRecord<StreamKey, byte[]>> records = new ArrayList<>();
 
-    public Stream(String streamId) {
+    public Stream(String streamId, ColumnFamily<StreamKey, byte[]> messageStore) {
         this.streamId = streamId;
+        this.messageStore = messageStore;
     }
 
     public String getStreamId() {
@@ -36,7 +37,7 @@ public class Stream {
     /**
      * Receives an incoming message from the Kafka consumer.
      */
-    public void recordFromKafka(ConsumerRecord<StreamKey, byte[]> record) {
+    public void recordFromKafka(ConsumerRecord<StreamKey, byte[]> record) throws RocksDBException {
         //String hex = String.format("%0" + (2*record.value().length) + "x", new BigInteger(1, record.value()));
         log.info("Received from Kafka: {} offset={}", record.key().toString(), record.offset());
 
@@ -45,6 +46,7 @@ public class Stream {
                     records.get(records.size() - 1).offset() + " to " + record.offset());
         }
         records.add(record);
+        messageStore.put(record.key(), record.value());
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.martinkl.logserver.storage;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -9,6 +11,7 @@ import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.rocksdb.RocksDB;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.martinkl.logserver.StreamKey;
@@ -20,17 +23,19 @@ public class StreamStore implements Managed {
     public static final String DEFAULT_BOOTSTRAP_SERVER = "localhost:9092";
     public static final String DEFAULT_KAFKA_TOPIC = "events";
     public static final int NUM_PARTITIONS = 16; // TODO make configurable
+    public static final Path STORAGE_PATH = Paths.get("data").toAbsolutePath(); // TODO make configurable
     private static final Logger log = LoggerFactory.getLogger(StreamStore.class);
 
     private final PartitionHandler[] handlers;
     private final Producer<StreamKey, byte[]> producer;
-    private Thread[] threads;
 
     public StreamStore() {
         this(null, null, 0, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
     }
 
     public StreamStore(String bootstrapServer, String kafkaTopic, int nodeId, int[] partitionToNode) {
+        RocksDB.loadLibrary();
+
         if (bootstrapServer == null) bootstrapServer = DEFAULT_BOOTSTRAP_SERVER;
         Properties consumerConfig = PartitionHandler.consumerConfig();
         Properties producerConfig = PartitionHandler.producerConfig();
@@ -58,29 +63,15 @@ public class StreamStore implements Managed {
 
     @Override
     public void start() throws Exception {
-        threads = new Thread[NUM_PARTITIONS];
-        for (int i = 0; i < NUM_PARTITIONS; i++) {
-            threads[i] = new Thread(handlers[i]);
-            threads[i].start();
-        }
+        for (int i = 0; i < NUM_PARTITIONS; i++) handlers[i].start();
         log.info("Started handler threads for {} partitions.", NUM_PARTITIONS);
     }
 
     @Override
     public void stop() throws Exception {
-        for (int i = 0; i < NUM_PARTITIONS; i++) {
-            handlers[i].shutdown();
-        }
+        for (int i = 0; i < NUM_PARTITIONS; i++) handlers[i].stop();
         producer.close(10, TimeUnit.SECONDS);
-
-        if (threads == null) return;
-        for (int i = 0; i < NUM_PARTITIONS; i++) {
-            try {
-                threads[i].join();
-            } catch (InterruptedException e) {
-                Thread.interrupted();
-            }
-        }
+        for (int i = 0; i < NUM_PARTITIONS; i++) handlers[i].waitForShutdown();
     }
 
     public Future<RecordMetadata> publishEvent(StreamKey key, byte[] value) {

@@ -17,7 +17,7 @@ public class StreamKey {
 
         @Override
         public byte[] serialize(String topic, StreamKey data) {
-            return data.getEncoded();
+            return (data == null) ? null : data.getEncoded();
         }
 
         @Override
@@ -32,7 +32,7 @@ public class StreamKey {
 
         @Override
         public StreamKey deserialize(String topic, byte[] data) {
-            return new StreamKey(data);
+            return (data == null) ? null : new StreamKey(data);
         }
 
         @Override
