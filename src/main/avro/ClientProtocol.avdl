@@ -1,0 +1,38 @@
+@namespace("org.trvedata.trvedb.avro")
+protocol ClientProtocol {
+    fixed ChannelID(16);
+    fixed PeerID(32);
+
+    /** Sent from client to server, requesting that a message be published to
+     * a particular channel. */
+    record SendMessage {
+        ChannelID channelID;
+        long senderSeqNo;
+        bytes payload;
+    }
+
+    /** Sent from client to server, subscribing to all messages in a particular channel. */
+    record SubscribeToChannel {
+        ChannelID channelID;
+        long startOffset;
+    }
+
+    /** Sent from server to client, indicating that a message was received on
+     * a particular channel. This may be a message sent by the same client, or
+     * by a different client. */
+    record ReceiveMessage {
+        ChannelID channelID;
+        PeerID senderID;
+        long senderSeqNo;
+        long offset;
+        bytes payload;
+    }
+
+    record ClientToServer {
+        union { SendMessage, SubscribeToChannel } message;
+    }
+
+    record ServerToClient {
+        union { ReceiveMessage } message;
+    }
+}
