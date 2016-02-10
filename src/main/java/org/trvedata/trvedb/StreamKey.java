@@ -1,4 +1,4 @@
-package com.martinkl.logserver;
+package org.trvedata.trvedb;
 
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -6,7 +6,7 @@ import java.util.Arrays;
 import java.util.Map;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
-import com.martinkl.logserver.storage.StreamStore;
+import org.trvedata.trvedb.storage.StreamStore;
 
 public class StreamKey {
 

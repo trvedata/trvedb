@@ -1,5 +1,5 @@
-Log server
-==========
+TRVE DB
+=======
 
 This repository is an experiment to use Kafka as a kind of multitenant streaming database that
 end-user clients can connect to.

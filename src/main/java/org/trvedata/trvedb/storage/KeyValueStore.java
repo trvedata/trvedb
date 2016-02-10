@@ -1,4 +1,4 @@
-package com.martinkl.logserver.storage;
+package org.trvedata.trvedb.storage;
 
 import java.io.Closeable;
 import java.io.UnsupportedEncodingException;

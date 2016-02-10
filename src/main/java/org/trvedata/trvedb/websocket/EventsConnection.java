@@ -1,4 +1,4 @@
-package com.martinkl.logserver.websocket;
+package org.trvedata.trvedb.websocket;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -8,8 +8,8 @@ import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.api.WriteCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.martinkl.logserver.StreamKey;
-import com.martinkl.logserver.storage.StreamStore;
+import org.trvedata.trvedb.StreamKey;
+import org.trvedata.trvedb.storage.StreamStore;
 
 /**
  * An EventsConnection instance is created for every established WebSocket connection

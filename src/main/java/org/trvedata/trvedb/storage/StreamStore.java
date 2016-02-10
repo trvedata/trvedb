@@ -1,4 +1,4 @@
-package com.martinkl.logserver.storage;
+package org.trvedata.trvedb.storage;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -14,8 +14,8 @@ import org.apache.kafka.common.TopicPartition;
 import org.rocksdb.RocksDB;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.martinkl.logserver.StreamKey;
-import com.martinkl.logserver.websocket.ClientConnection;
+import org.trvedata.trvedb.StreamKey;
+import org.trvedata.trvedb.websocket.ClientConnection;
 import io.dropwizard.lifecycle.Managed;
 
 public class StreamStore implements Managed {

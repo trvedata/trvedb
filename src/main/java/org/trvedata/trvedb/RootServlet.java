@@ -1,4 +1,4 @@
-package com.martinkl.logserver;
+package org.trvedata.trvedb;
 
 import java.io.IOException;
 import javax.servlet.ServletException;

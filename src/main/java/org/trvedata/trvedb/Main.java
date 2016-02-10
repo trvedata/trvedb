@@ -1,8 +1,8 @@
-package com.martinkl.logserver;
+package org.trvedata.trvedb;
 
-import com.martinkl.logserver.rest.StreamResource;
-import com.martinkl.logserver.storage.StreamStore;
-import com.martinkl.logserver.websocket.EventsServlet;
+import org.trvedata.trvedb.rest.StreamResource;
+import org.trvedata.trvedb.storage.StreamStore;
+import org.trvedata.trvedb.websocket.EventsServlet;
 import io.dropwizard.Application;
 import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.setup.Bootstrap;

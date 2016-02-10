@@ -1,4 +1,4 @@
-package com.martinkl.logserver;
+package org.trvedata.trvedb;
 
 import static org.junit.Assert.*;
 import java.util.Arrays;

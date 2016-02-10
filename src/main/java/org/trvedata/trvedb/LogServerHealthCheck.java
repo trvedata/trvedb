@@ -1,4 +1,4 @@
-package com.martinkl.logserver;
+package org.trvedata.trvedb;
 
 import com.codahale.metrics.health.HealthCheck;
 

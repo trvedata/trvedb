@@ -14,9 +14,9 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
-    <groupId>com.martinkl.research</groupId>
-    <artifactId>log-server</artifactId>
-    <name>log-server</name>
+    <groupId>org.trvedata.trvedb</groupId>
+    <artifactId>trvedb-server</artifactId>
+    <name>trvedb-server</name>
     <version>0.0.1</version>
     <packaging>jar</packaging>
 
@@ -82,7 +82,7 @@
                             <goal>java</goal>
                         </goals>
                         <configuration>
-                            <mainClass>com.martinkl.logserver.Main</mainClass>
+                            <mainClass>org.trvedata.trvedb.Main</mainClass>
                             <arguments>
                                 <argument>server</argument>
                                 <argument>config.yml</argument>

@@ -1,4 +1,4 @@
-package com.martinkl.logserver;
+package org.trvedata.trvedb;
 
 import org.hibernate.validator.constraints.NotEmpty;
 import com.fasterxml.jackson.annotation.JsonProperty;

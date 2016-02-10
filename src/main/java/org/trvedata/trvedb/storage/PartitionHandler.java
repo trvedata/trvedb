@@ -1,4 +1,4 @@
-package com.martinkl.logserver.storage;
+package org.trvedata.trvedb.storage;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -26,8 +26,8 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.martinkl.logserver.StreamKey;
-import com.martinkl.logserver.websocket.ClientConnection;
+import org.trvedata.trvedb.StreamKey;
+import org.trvedata.trvedb.websocket.ClientConnection;
 import io.dropwizard.lifecycle.Managed;
 
 /**

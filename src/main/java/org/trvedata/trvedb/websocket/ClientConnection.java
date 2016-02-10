@@ -1,6 +1,6 @@
-package com.martinkl.logserver.websocket;
+package org.trvedata.trvedb.websocket;
 
-import com.martinkl.logserver.StreamKey;
+import org.trvedata.trvedb.StreamKey;
 
 /**
  * A handle to a WebSocket connection with a client. This handle is passed to

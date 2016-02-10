@@ -1,4 +1,4 @@
-package com.martinkl.logserver.rest;
+package org.trvedata.trvedb.rest;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;

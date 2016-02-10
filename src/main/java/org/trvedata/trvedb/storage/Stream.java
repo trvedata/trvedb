@@ -1,4 +1,4 @@
-package com.martinkl.logserver.storage;
+package org.trvedata.trvedb.storage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,8 +9,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.rocksdb.RocksDBException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.martinkl.logserver.StreamKey;
-import com.martinkl.logserver.websocket.ClientConnection;
+import org.trvedata.trvedb.StreamKey;
+import org.trvedata.trvedb.websocket.ClientConnection;
 
 /**
  * Manages a single fine-grained stream and the subscribers on it. Everything

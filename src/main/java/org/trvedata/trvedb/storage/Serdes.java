@@ -1,4 +1,4 @@
-package com.martinkl.logserver.storage;
+package org.trvedata.trvedb.storage;
 
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
