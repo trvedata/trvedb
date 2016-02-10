@@ -89,10 +89,10 @@ public class StreamKey {
     private void encode() {
         if (this.encoded != null) return;
 
-        ByteBuffer buf = ByteBuffer.allocate(29);
+        ByteBuffer buf = ByteBuffer.allocate(53);
         buf.put((byte) 0); // version
         hexToByteBuffer(buf, streamId, 16);
-        hexToByteBuffer(buf, senderId, 8);
+        hexToByteBuffer(buf, senderId, 32);
         buf.putInt(seqNo);
         this.encoded = buf.array();
     }
@@ -105,7 +105,7 @@ public class StreamKey {
         if (version != 0) throw new IllegalStateException("Bad version number: " + version);
 
         this.streamId = byteBufferToHex(buf, 16);
-        this.senderId = byteBufferToHex(buf, 8);
+        this.senderId = byteBufferToHex(buf, 32);
         this.seqNo = buf.getInt();
     }
 

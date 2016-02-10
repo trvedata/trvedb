@@ -38,7 +38,7 @@ public class EventsServlet extends WebSocketServlet {
 
     private class ConnectionCreator implements WebSocketCreator {
         private final Pattern STREAM_PARAM = Pattern.compile("\\A[0-9a-fA-F]{32}\\z");
-        private final Pattern SENDER_PARAM = Pattern.compile("\\A[0-9a-fA-F]{16}\\z");
+        private final Pattern SENDER_PARAM = Pattern.compile("\\A[0-9a-fA-F]{64}\\z");
         private final Pattern SEQ_NO_PARAM = Pattern.compile("\\A(0|[1-9][0-9]{0,8})\\z");
 
         @Override
