@@ -67,16 +67,6 @@ public class EventsConnection extends WebSocketAdapter {
         log.info(str.toString());
 
         store.publishEvent(key, Arrays.copyOfRange(payload, offset, offset + len));
-
-        getSession().getRemote().sendString(str.toString(), new WriteCallback() {
-            @Override
-            public void writeSuccess() {}
-
-            @Override
-            public void writeFailed(Throwable error) {
-                log.info("Sending message failed: ", error);
-            }
-        });
     }
 
     /**
