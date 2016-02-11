@@ -37,20 +37,13 @@ public class EventsServlet extends WebSocketServlet {
     }
 
     private class ConnectionCreator implements WebSocketCreator {
-        private final Pattern STREAM_PARAM = Pattern.compile("\\A[0-9a-fA-F]{32}\\z");
-        private final Pattern SENDER_PARAM = Pattern.compile("\\A[0-9a-fA-F]{64}\\z");
-        private final Pattern SEQ_NO_PARAM = Pattern.compile("\\A(0|[1-9][0-9]{0,8})\\z");
+        private final Pattern PEER_ID_PARAM = Pattern.compile("\\A[0-9a-fA-F]{64}\\z");
 
         @Override
         public Object createWebSocket(ServletUpgradeRequest req, ServletUpgradeResponse resp) {
-            String streamId = getParameter(req, resp, "stream", STREAM_PARAM);
-            if (streamId == null) return null;
-            String senderId = getParameter(req, resp, "sender", SENDER_PARAM);
+            String senderId = getParameter(req, resp, "peer_id", PEER_ID_PARAM);
             if (senderId == null) return null;
-            String seqNoStr = getParameter(req, resp, "seqno", SEQ_NO_PARAM);
-            if (seqNoStr == null) return null;
-
-            return new EventsConnection(store, streamId, senderId, Integer.parseInt(seqNoStr));
+            return new EventsConnection(store, senderId);
         }
 
         public String getParameter(ServletUpgradeRequest req, ServletUpgradeResponse resp,

@@ -1,14 +1,28 @@
 package org.trvedata.trvedb.websocket;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.avro.io.BinaryDecoder;
+import org.apache.avro.io.BinaryEncoder;
+import org.apache.avro.io.DatumReader;
+import org.apache.avro.io.DatumWriter;
+import org.apache.avro.io.DecoderFactory;
+import org.apache.avro.io.EncoderFactory;
+import org.apache.avro.specific.SpecificDatumReader;
+import org.apache.avro.specific.SpecificDatumWriter;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.api.WriteCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.trvedata.trvedb.Encoding;
 import org.trvedata.trvedb.StreamKey;
+import org.trvedata.trvedb.avro.ClientToServer;
+import org.trvedata.trvedb.avro.SendMessage;
+import org.trvedata.trvedb.avro.ServerToClient;
+import org.trvedata.trvedb.avro.SubscribeToChannel;
 import org.trvedata.trvedb.storage.StreamStore;
 
 /**
@@ -23,16 +37,14 @@ public class EventsConnection extends WebSocketAdapter {
     private static final Logger log = LoggerFactory.getLogger(EventsConnection.class);
     private final StreamStore store;
     private final ConnectionHandle handle;
-    private final String streamId;
     private final String senderId;
-    private int seqNo;
+    private final DatumReader<ClientToServer> readFromClient = new SpecificDatumReader<>(ClientToServer.class);
+    private final DatumWriter<ServerToClient> writeToClient = new SpecificDatumWriter<>(ServerToClient.class);
 
-    public EventsConnection(StreamStore store, String streamId, String senderId, int initialSeqNo) {
+    public EventsConnection(StreamStore store, String senderId) {
         this.store = store;
         this.handle = new ConnectionHandle();
-        this.streamId = streamId;
         this.senderId = senderId;
-        this.seqNo = initialSeqNo;
     }
 
     /**
@@ -41,8 +53,7 @@ public class EventsConnection extends WebSocketAdapter {
     @Override
     public void onWebSocketConnect(Session session) {
         super.onWebSocketConnect(session);
-        log.info("Socket connected on stream {}: {}", streamId, session);
-        store.subscribe(handle);
+        log.info("Connection from senderId {}", senderId);
     }
 
     /**
@@ -51,22 +62,30 @@ public class EventsConnection extends WebSocketAdapter {
     @Override
     public void onWebSocketBinary(byte[] payload, int offset, int len) {
         super.onWebSocketBinary(payload, offset, len);
-        StreamKey key = new StreamKey(streamId, senderId, seqNo);
-        seqNo++;
 
-        StringBuilder str = new StringBuilder("Received BINARY message: ");
-        str.append(key);
-        str.append(" value =");
-        for (int i = 0; i < len; i++) {
-            str.append(' ');
-            int val = payload[offset + i];
-            if (val < 0) val += 256; // signed to unsigned
-            if (val < 16) str.append('0');
-            str.append(Integer.toHexString(val));
+        BinaryDecoder decoder = DecoderFactory.get().binaryDecoder(payload, offset, len, null);
+        Object request;
+        try {
+            request = readFromClient.read(null, decoder).getMessage();
+        } catch (IOException e) {
+            // TODO Close connection on error
+            log.warn("Failed to decode message from client", e);
+            return;
         }
-        log.info(str.toString());
 
-        store.publishEvent(key, Arrays.copyOfRange(payload, offset, offset + len));
+        if (request instanceof SendMessage) {
+            SendMessage send = (SendMessage) request;
+            StreamKey key = new StreamKey(Encoding.channelID(send.getChannelID()),
+                senderId, send.getSenderSeqNo().intValue());
+            store.publishEvent(key, send.getPayload().array());
+
+        } else if (request instanceof SubscribeToChannel) {
+            SubscribeToChannel sub = (SubscribeToChannel) request;
+            store.subscribe(handle, Encoding.channelID(sub.getChannelID()), sub.getStartOffset());
+
+        } else {
+            throw new IllegalStateException("Unknown request type: " + request.getClass().getName());
+        }
     }
 
     /**
@@ -75,7 +94,7 @@ public class EventsConnection extends WebSocketAdapter {
     @Override
     public void onWebSocketText(String message) {
         super.onWebSocketText(message);
-        log.info("Received TEXT message on stream {}: {}", streamId, message);
+        log.info("Received text message from sender {}: {}", senderId, message);
     }
 
     /**
@@ -85,7 +104,7 @@ public class EventsConnection extends WebSocketAdapter {
     @Override
     public void onWebSocketClose(int statusCode, String reason) {
         super.onWebSocketClose(statusCode, reason);
-        log.info("Socket for stream {} closed: {}", streamId, Integer.toString(statusCode) + " " + reason);
+        log.info("Socket for sender {} closed: {}", senderId, Integer.toString(statusCode) + " " + reason);
         store.unsubscribe(handle);
     }
 
@@ -100,7 +119,6 @@ public class EventsConnection extends WebSocketAdapter {
         store.unsubscribe(handle);
     }
 
-
     /**
      * The handle is given to the storage layer in order to subscribe to
      * streams. Its methods may be called by any thread.
@@ -108,26 +126,14 @@ public class EventsConnection extends WebSocketAdapter {
     private class ConnectionHandle implements ClientConnection {
         private AtomicInteger inFlightMessages = new AtomicInteger(0);
 
-        public String getStreamId() {
-            return streamId;
-        }
-
         public String getSenderId() {
             return senderId;
-        }
-
-        public int getSeqNo() {
-            return seqNo;
-        }
-
-        public StreamKey getStreamKey() {
-            return new StreamKey(streamId, senderId, seqNo);
         }
 
         /**
          * @see ClientConnection#offerMessage(byte[])
          */
-        public boolean offerMessage(byte[] message) {
+        public boolean offerMessage(ServerToClient message) {
             Session session = getSession();
             if (session == null || !session.isOpen()) return false;
 
@@ -136,7 +142,18 @@ public class EventsConnection extends WebSocketAdapter {
                 return false;
             }
 
-            session.getRemote().sendBytes(ByteBuffer.wrap(message), new WriteCallback() {
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            try {
+                BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(stream, null);
+                writeToClient.write(message, encoder);
+                encoder.flush();
+            } catch (IOException e) {
+                // TODO Close connection on error
+                log.warn("Failed to encode message to client", e);
+                return true;
+            }
+
+            session.getRemote().sendBytes(ByteBuffer.wrap(stream.toByteArray()), new WriteCallback() {
                 @Override
                 public void writeSuccess() {
                     inFlightMessages.decrementAndGet();

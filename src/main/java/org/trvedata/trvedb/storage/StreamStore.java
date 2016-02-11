@@ -79,15 +79,12 @@ public class StreamStore implements Managed {
         return handler.publishEvent(key, value);
     }
 
-    public void subscribe(ClientConnection connection) {
-        getHandler(connection).subscribe(connection);
+    public void subscribe(ClientConnection connection, String streamId, long startOffset) {
+        StreamKey key = new StreamKey(streamId, connection.getSenderId(), 0);
+        handlers[key.getPartition()].subscribe(connection, streamId, startOffset);
     }
 
     public void unsubscribe(ClientConnection connection) {
-        getHandler(connection).unsubscribe(connection);
-    }
-
-    private PartitionHandler getHandler(ClientConnection connection) {
-        return handlers[connection.getStreamKey().getPartition()];
+        for (int i = 0; i < NUM_PARTITIONS; i++) handlers[i].unsubscribe(connection);
     }
 }

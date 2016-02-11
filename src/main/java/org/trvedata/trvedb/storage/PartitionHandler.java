@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -42,6 +43,7 @@ public class PartitionHandler implements Runnable, Managed {
     private final Properties consumerConfig;
     private final Producer<StreamKey, byte[]> producer;
     private final ConcurrentMap<String, Stream> streams = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ClientConnection, Set<String>> clientSubscriptions = new ConcurrentHashMap<>();
     private final AtomicBoolean shutdownRequested = new AtomicBoolean(false);
     private final AtomicBoolean threadFailed = new AtomicBoolean(false);
     private final CompletableFuture<Void> startupFuture = new CompletableFuture<>();
@@ -153,12 +155,22 @@ public class PartitionHandler implements Runnable, Managed {
         return producer.send(record);
     }
 
-    public void subscribe(ClientConnection connection) {
-        getStream(connection.getStreamId()).subscribe(connection);
+    public void subscribe(ClientConnection connection, String streamId, long startOffset) {
+        if (!clientSubscriptions.containsKey(connection)) {
+            clientSubscriptions.putIfAbsent(connection, ConcurrentHashMap.newKeySet());
+        }
+        clientSubscriptions.get(connection).add(streamId);
+
+        getStream(streamId).subscribe(connection, startOffset);
     }
 
     public void unsubscribe(ClientConnection connection) {
-        getStream(connection.getStreamId()).unsubscribe(connection);
+        Set<String> subscriptions = clientSubscriptions.remove(connection);
+        if (subscriptions == null) return;
+
+        for (String streamId : subscriptions) {
+            getStream(streamId).unsubscribe(connection);
+        }
     }
 
     Stream getStream(String streamId) {
