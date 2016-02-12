@@ -74,6 +74,15 @@ public class PartitionHandler implements Runnable, Managed {
         Properties config = new Properties();
         config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, ChannelKey.KeySerializer.class.getName());
         config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
+
+        // The Kafka producer maintains a fixed-size buffer for messages being sent to
+        // the brokers. If this buffer fills up, send requests will block for up to
+        // MAX_BLOCK_MS_CONFIG milliseconds waiting for buffer space to free up. If this
+        // waiting time is exceeded, sending requests throw TimeoutException. We set the
+        // maximum blocking time fairly short, to allow us to shed load and free up
+        // threads if the producer is overloaded.
+        config.put(ProducerConfig.BUFFER_MEMORY_CONFIG, 32 * 1024 * 1024L);
+        config.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 1000);
         return config;
     }
 

@@ -12,7 +12,10 @@ import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.EncoderFactory;
 import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.avro.specific.SpecificDatumWriter;
+import org.apache.kafka.clients.producer.BufferExhaustedException;
+import org.apache.kafka.common.errors.TimeoutException;
 import org.eclipse.jetty.websocket.api.Session;
+import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.api.WriteCallback;
 import org.slf4j.Logger;
@@ -67,22 +70,19 @@ public class EventsConnection extends WebSocketAdapter {
         Object request;
         try {
             request = readFromClient.read(null, decoder).getMessage();
-        } catch (IOException e) {
-            // TODO Close connection on error
+        } catch (Exception e) {
             log.warn("Failed to decode message from client", e);
+            Session session = getSession();
+            if (session != null && session.isOpen()) {
+                session.close(StatusCode.BAD_PAYLOAD, "Could not parse frame");
+            }
             return;
         }
 
         if (request instanceof SendMessage) {
-            SendMessage send = (SendMessage) request;
-            ChannelKey key = new ChannelKey(Encoding.channelID(send.getChannelID()),
-                peerID, send.getSenderSeqNo().intValue());
-            store.publishEvent(key, send.getPayload().array());
-
+            sendMessageRequest((SendMessage) request);
         } else if (request instanceof SubscribeToChannel) {
-            SubscribeToChannel sub = (SubscribeToChannel) request;
-            store.subscribe(handle, Encoding.channelID(sub.getChannelID()), sub.getStartOffset());
-
+            subscribeRequest((SubscribeToChannel) request);
         } else {
             throw new IllegalStateException("Unknown request type: " + request.getClass().getName());
         }
@@ -93,8 +93,11 @@ public class EventsConnection extends WebSocketAdapter {
      */
     @Override
     public void onWebSocketText(String message) {
-        super.onWebSocketText(message);
-        log.info("Received text message from peer {}: {}", peerID, message);
+        log.info("Received unsupported text message from peer {}", peerID);
+        Session session = getSession();
+        if (session != null && session.isOpen()) {
+            session.close(StatusCode.BAD_DATA, "This endpoint only accepts binary messages");
+        }
     }
 
     /**
@@ -117,6 +120,38 @@ public class EventsConnection extends WebSocketAdapter {
         super.onWebSocketError(cause);
         log.info("Socket error: ", cause);
         store.unsubscribe(handle);
+    }
+
+    /**
+     * Handles a client request to send a message to a channel.
+     */
+    private void sendMessageRequest(SendMessage send) {
+        Session session = getSession();
+        if (session == null || !session.isOpen()) return;
+
+        try {
+            ChannelKey key = new ChannelKey(Encoding.channelID(send.getChannelID()),
+                peerID, send.getSenderSeqNo().intValue());
+            store.publishEvent(key, send.getPayload().array());
+
+        } catch (TimeoutException | BufferExhaustedException e) {
+            // The Kafka producer has a fixed-size buffer of messages being sent. Normally,
+            // if buffer space is available, the send request returns immediately and is
+            // processed asynchronously. If clients send messages faster than they can be
+            // published to Kafka, the buffer space fills up, and send requests start
+            // blocking. The maximum blocking time is configured to be fairly short. If it
+            // is exceeded, TimeoutException is thrown to indicate that the producer is
+            // overloaded. To shed load, close connection and ask the client to back off.
+            log.warn("Failed to publish message to Kafka", e);
+            session.close(StatusCode.TRY_AGAIN_LATER, "SendMessage request failed due to server overload");
+        }
+    }
+
+    /**
+     * Handles a client request to subscribe to a channel.
+     */
+    private void subscribeRequest(SubscribeToChannel sub) {
+        store.subscribe(handle, Encoding.channelID(sub.getChannelID()), sub.getStartOffset());
     }
 
     /**
@@ -147,9 +182,9 @@ public class EventsConnection extends WebSocketAdapter {
                 BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(stream, null);
                 writeToClient.write(message, encoder);
                 encoder.flush();
-            } catch (IOException e) {
-                // TODO Close connection on error
+            } catch (Exception e) {
                 log.warn("Failed to encode message to client", e);
+                session.close(StatusCode.SERVER_ERROR, "Internal server error");
                 return true;
             }
 
