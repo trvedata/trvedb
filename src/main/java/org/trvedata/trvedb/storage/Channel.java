@@ -12,40 +12,40 @@ import org.rocksdb.RocksDBException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.trvedata.trvedb.Encoding;
-import org.trvedata.trvedb.StreamKey;
+import org.trvedata.trvedb.ChannelKey;
 import org.trvedata.trvedb.avro.ChannelID;
 import org.trvedata.trvedb.avro.ReceiveMessage;
 import org.trvedata.trvedb.avro.ServerToClient;
 import org.trvedata.trvedb.websocket.ClientConnection;
 
 /**
- * Manages a single fine-grained stream and the subscribers on it. Everything
- * here runs on the {@link PartitionHandler} thread to which the stream belongs,
+ * Manages a single fine-grained channel and the subscribers on it. Everything
+ * here runs on the {@link PartitionHandler} thread to which the channel belongs,
  * unless indicated otherwise.
  */
-public class Stream {
+public class Channel {
 
-    private static final Logger log = LoggerFactory.getLogger(Stream.class);
+    private static final Logger log = LoggerFactory.getLogger(Channel.class);
     private final ConcurrentMap<ClientConnection, Long> subscriberOffsets = new ConcurrentHashMap<>();
-    private final String streamId;
-    private final ChannelID avroStreamId;
-    private final ColumnFamily<StreamKey, byte[]> messageStore;
-    private final List<ConsumerRecord<StreamKey, byte[]>> records = new ArrayList<>();
+    private final String channelID;
+    private final ChannelID avroChannelID;
+    private final ColumnFamily<ChannelKey, byte[]> messageStore;
+    private final List<ConsumerRecord<ChannelKey, byte[]>> records = new ArrayList<>();
 
-    public Stream(String streamId, ColumnFamily<StreamKey, byte[]> messageStore) {
-        this.streamId = streamId;
-        this.avroStreamId = Encoding.channelID(streamId);
+    public Channel(String channelID, ColumnFamily<ChannelKey, byte[]> messageStore) {
+        this.channelID = channelID;
+        this.avroChannelID = Encoding.channelID(channelID);
         this.messageStore = messageStore;
     }
 
-    public String getStreamId() {
-        return streamId;
+    public String getChannelID() {
+        return channelID;
     }
 
     /**
      * Receives an incoming message from the Kafka consumer.
      */
-    public void recordFromKafka(ConsumerRecord<StreamKey, byte[]> record) throws RocksDBException {
+    public void recordFromKafka(ConsumerRecord<ChannelKey, byte[]> record) throws RocksDBException {
         String hex = DatatypeConverter.printHexBinary(record.value()).toLowerCase();
         log.info("Received from Kafka: {} offset={} value={}", record.key().toString(), record.offset(), hex);
 
@@ -62,11 +62,11 @@ public class Stream {
      */
     public void pollSubscribers() {
         if (records.isEmpty()) return;
-        long latestStreamOffset = records.get(records.size() - 1).offset();
+        long latestOffset = records.get(records.size() - 1).offset();
 
         for (Map.Entry<ClientConnection, Long> entry : subscriberOffsets.entrySet()) {
             Long clientOffset = entry.getValue();
-            if (clientOffset >= latestStreamOffset) continue;
+            if (clientOffset >= latestOffset) continue;
 
             // TODO this should be read from messageStore, not from an in-memory list in such a stupid way
             int i = 0;
@@ -75,18 +75,18 @@ public class Stream {
 
             ClientConnection connection = entry.getKey();
             while (i < records.size() && offerToClient(connection, records.get(i))) {
-                log.info("Channel {}: sending offset to client {}", streamId,
-                    records.get(i).offset(), connection.getSenderId());
+                log.info("Channel {}: sending offset to client {}", channelID,
+                    records.get(i).offset(), connection.getPeerID());
                 entry.setValue(records.get(i).offset());
                 i++;
             }
         }
     }
 
-    private boolean offerToClient(ClientConnection connection, ConsumerRecord<StreamKey, byte[]> record) {
+    private boolean offerToClient(ClientConnection connection, ConsumerRecord<ChannelKey, byte[]> record) {
         ReceiveMessage message = new ReceiveMessage(
-            avroStreamId,
-            Encoding.peerID(record.key().getSenderId()),
+            avroChannelID,
+            Encoding.peerID(record.key().getSenderID()),
             (long) record.key().getSeqNo(),
             record.offset(),
             ByteBuffer.wrap(record.value()));
@@ -95,11 +95,11 @@ public class Stream {
     }
 
     /**
-     * Subscribes a WebSocket connection to receive messages from this stream.
+     * Subscribes a WebSocket connection to receive messages from this channel.
      * This method is called by threads in the Jetty thread pool.
      */
     public void subscribe(ClientConnection connection, long startOffset) {
-        log.info("Subscribed to channel {} with startOffset {}", streamId, startOffset);
+        log.info("Subscribed to channel {} with startOffset {}", channelID, startOffset);
         subscriberOffsets.putIfAbsent(connection, startOffset);
     }
 
@@ -108,7 +108,7 @@ public class Stream {
      * This method is called by threads in the Jetty thread pool.
      */
     public void unsubscribe(ClientConnection connection) {
-        log.info("Unsubscribed {} from channel {}", connection.getSenderId(), streamId);
+        log.info("Unsubscribed {} from channel {}", connection.getPeerID(), channelID);
         subscriberOffsets.remove(connection);
     }
 }

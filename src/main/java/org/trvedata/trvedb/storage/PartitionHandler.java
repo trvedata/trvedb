@@ -27,13 +27,13 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.trvedata.trvedb.StreamKey;
+import org.trvedata.trvedb.ChannelKey;
 import org.trvedata.trvedb.websocket.ClientConnection;
 import io.dropwizard.lifecycle.Managed;
 
 /**
  * A thread that consumes a single partition from Kafka, and maintains all the
- * streams contained in that partition. Public methods may be called from
+ * channels contained in that partition. Public methods may be called from
  * anywhere and must therefore be thread-safe.
  */
 public class PartitionHandler implements Runnable, Managed {
@@ -41,19 +41,19 @@ public class PartitionHandler implements Runnable, Managed {
     private static final Logger log = LoggerFactory.getLogger(PartitionHandler.class);
     private final TopicPartition topicPartition;
     private final Properties consumerConfig;
-    private final Producer<StreamKey, byte[]> producer;
-    private final ConcurrentMap<String, Stream> streams = new ConcurrentHashMap<>();
+    private final Producer<ChannelKey, byte[]> producer;
+    private final ConcurrentMap<String, Channel> channels = new ConcurrentHashMap<>();
     private final ConcurrentMap<ClientConnection, Set<String>> clientSubscriptions = new ConcurrentHashMap<>();
     private final AtomicBoolean shutdownRequested = new AtomicBoolean(false);
     private final AtomicBoolean threadFailed = new AtomicBoolean(false);
     private final CompletableFuture<Void> startupFuture = new CompletableFuture<>();
     private final Path storagePath;
     private final Thread thread;
-    private Consumer<StreamKey, byte[]> consumer = null;
-    private ColumnFamily<StreamKey, byte[]> messageStore = null;
+    private Consumer<ChannelKey, byte[]> consumer = null;
+    private ColumnFamily<ChannelKey, byte[]> messageStore = null;
 
     public PartitionHandler(TopicPartition topicPartition, Properties consumerConfig,
-                            Producer<StreamKey, byte[]> producer) {
+                            Producer<ChannelKey, byte[]> producer) {
         this.topicPartition = topicPartition;
         this.consumerConfig = consumerConfig;
         this.producer = producer;
@@ -65,14 +65,14 @@ public class PartitionHandler implements Runnable, Managed {
     public static Properties consumerConfig() {
         Properties config = new Properties();
         config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-        config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StreamKey.KeyDeserializer.class.getName());
+        config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ChannelKey.KeyDeserializer.class.getName());
         config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
         return config;
     }
 
     public static Properties producerConfig() {
         Properties config = new Properties();
-        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StreamKey.KeySerializer.class.getName());
+        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, ChannelKey.KeySerializer.class.getName());
         config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
         return config;
     }
@@ -108,13 +108,13 @@ public class PartitionHandler implements Runnable, Managed {
     @Override
     public void run() {
         // Ought to call #configure on serializers, but they're no-ops in this case
-        Serdes<StreamKey, byte[]> messageStoreSerdes = new Serdes<>(new StreamKey.KeySerializer(),
-                new StreamKey.KeyDeserializer(),
+        Serdes<ChannelKey, byte[]> messageStoreSerdes = new Serdes<>(new ChannelKey.KeySerializer(),
+                new ChannelKey.KeyDeserializer(),
                 new ByteArraySerializer(),
                 new ByteArrayDeserializer());
 
         try (
-            Consumer<StreamKey, byte[]> consumer = new KafkaConsumer<>(consumerConfig);
+            Consumer<ChannelKey, byte[]> consumer = new KafkaConsumer<>(consumerConfig);
             KeyValueStore store = new KeyValueStore(storagePath);
         ) {
             this.consumer = consumer;
@@ -127,14 +127,14 @@ public class PartitionHandler implements Runnable, Managed {
             startupFuture.complete(null);
 
             while (!shutdownRequested.get()) {
-                ConsumerRecords<StreamKey, byte[]> records = consumer.poll(1000);
-                for (ConsumerRecord<StreamKey, byte[]> record : records.records(topicPartition)) {
-                    Stream stream = getStream(record.key().getStreamId());
-                    stream.recordFromKafka(record);
+                ConsumerRecords<ChannelKey, byte[]> records = consumer.poll(1000);
+                for (ConsumerRecord<ChannelKey, byte[]> record : records.records(topicPartition)) {
+                    Channel channel = getChannel(record.key().getChannelID());
+                    channel.recordFromKafka(record);
                 }
 
-                for (Stream stream : streams.values()) {
-                    stream.pollSubscribers();
+                for (Channel channel : channels.values()) {
+                    channel.pollSubscribers();
                 }
             }
         } catch (Exception e) {
@@ -148,36 +148,36 @@ public class PartitionHandler implements Runnable, Managed {
         }
     }
 
-    public Future<RecordMetadata> publishEvent(StreamKey key, byte[] value) {
+    public Future<RecordMetadata> publishEvent(ChannelKey key, byte[] value) {
         // TODO check for duplicates. use a queue and process on handler thread?
-        ProducerRecord<StreamKey, byte[]> record = new ProducerRecord<>(
+        ProducerRecord<ChannelKey, byte[]> record = new ProducerRecord<>(
                 topicPartition.topic(), topicPartition.partition(), key, value);
         return producer.send(record);
     }
 
-    public void subscribe(ClientConnection connection, String streamId, long startOffset) {
+    public void subscribe(ClientConnection connection, String channelID, long startOffset) {
         if (!clientSubscriptions.containsKey(connection)) {
             clientSubscriptions.putIfAbsent(connection, ConcurrentHashMap.newKeySet());
         }
-        clientSubscriptions.get(connection).add(streamId);
+        clientSubscriptions.get(connection).add(channelID);
 
-        getStream(streamId).subscribe(connection, startOffset);
+        getChannel(channelID).subscribe(connection, startOffset);
     }
 
     public void unsubscribe(ClientConnection connection) {
         Set<String> subscriptions = clientSubscriptions.remove(connection);
         if (subscriptions == null) return;
 
-        for (String streamId : subscriptions) {
-            getStream(streamId).unsubscribe(connection);
+        for (String channelID : subscriptions) {
+            getChannel(channelID).unsubscribe(connection);
         }
     }
 
-    Stream getStream(String streamId) {
-        if (!streams.containsKey(streamId)) {
-            streams.putIfAbsent(streamId, new Stream(streamId, messageStore));
+    Channel getChannel(String channelID) {
+        if (!channels.containsKey(channelID)) {
+            channels.putIfAbsent(channelID, new Channel(channelID, messageStore));
         }
-        return streams.get(streamId);
+        return channels.get(channelID);
     }
 
     public boolean hasFailed() {

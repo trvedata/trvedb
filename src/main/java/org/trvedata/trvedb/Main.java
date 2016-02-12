@@ -1,6 +1,6 @@
 package org.trvedata.trvedb;
 
-import org.trvedata.trvedb.rest.StreamResource;
+import org.trvedata.trvedb.rest.ChannelResource;
 import org.trvedata.trvedb.storage.StreamStore;
 import org.trvedata.trvedb.websocket.EventsServlet;
 import io.dropwizard.Application;
@@ -33,7 +33,7 @@ public class Main extends Application<LogServerConfig> {
 
         environment.lifecycle().manage(store);
         environment.healthChecks().register("logserver", new LogServerHealthCheck());
-        environment.jersey().register(new StreamResource());
+        environment.jersey().register(new ChannelResource());
         environment.servlets().addServlet("events", new EventsServlet(store)).addMapping("/events");
     }
 }

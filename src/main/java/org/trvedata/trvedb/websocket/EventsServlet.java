@@ -15,9 +15,9 @@ import org.trvedata.trvedb.storage.StreamStore;
 
 /**
  * Servlet for a HTTP endpoint that can be upgraded to a WebSocket connection.
- * The endpoint accepts query parameters identifying the stream to connect to,
- * the ID of the sender, and the sender's last sequence number. For every
- * established WebSocket connection, this servlet creates an
+ * The endpoint accepts a query parameter identifying the client's peer ID
+ * (currently not authenticated, but the plan is to authenticate it in future).
+ * For every established WebSocket connection, this servlet creates an
  * {@link EventsConnection} instance.
  */
 @SuppressWarnings("serial")
@@ -41,9 +41,9 @@ public class EventsServlet extends WebSocketServlet {
 
         @Override
         public Object createWebSocket(ServletUpgradeRequest req, ServletUpgradeResponse resp) {
-            String senderId = getParameter(req, resp, "peer_id", PEER_ID_PARAM);
-            if (senderId == null) return null;
-            return new EventsConnection(store, senderId);
+            String peerID = getParameter(req, resp, "peer_id", PEER_ID_PARAM);
+            if (peerID == null) return null;
+            return new EventsConnection(store, peerID);
         }
 
         public String getParameter(ServletUpgradeRequest req, ServletUpgradeResponse resp,

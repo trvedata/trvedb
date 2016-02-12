@@ -14,7 +14,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.rocksdb.RocksDB;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.trvedata.trvedb.StreamKey;
+import org.trvedata.trvedb.ChannelKey;
 import org.trvedata.trvedb.websocket.ClientConnection;
 import io.dropwizard.lifecycle.Managed;
 
@@ -27,13 +27,13 @@ public class StreamStore implements Managed {
     private static final Logger log = LoggerFactory.getLogger(StreamStore.class);
 
     private final PartitionHandler[] handlers;
-    private final Producer<StreamKey, byte[]> producer;
+    private final Producer<ChannelKey, byte[]> producer;
 
     public StreamStore() {
         this(null, null, 0, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
     }
 
-    public StreamStore(String bootstrapServer, String kafkaTopic, int nodeId, int[] partitionToNode) {
+    public StreamStore(String bootstrapServer, String kafkaTopic, int nodeID, int[] partitionToNode) {
         RocksDB.loadLibrary();
 
         if (bootstrapServer == null) bootstrapServer = DEFAULT_BOOTSTRAP_SERVER;
@@ -52,7 +52,7 @@ public class StreamStore implements Managed {
 
         this.handlers = new PartitionHandler[NUM_PARTITIONS];
         for (int i = 0; i < NUM_PARTITIONS; i++) {
-            if (partitionToNode[i] == nodeId) {
+            if (partitionToNode[i] == nodeID) {
                 TopicPartition topicPartition = new TopicPartition(kafkaTopic, i);
                 this.handlers[i] = new PartitionHandler(topicPartition, consumerConfig, producer);
             } else {
@@ -74,14 +74,14 @@ public class StreamStore implements Managed {
         for (int i = 0; i < NUM_PARTITIONS; i++) handlers[i].waitForShutdown();
     }
 
-    public Future<RecordMetadata> publishEvent(StreamKey key, byte[] value) {
+    public Future<RecordMetadata> publishEvent(ChannelKey key, byte[] value) {
         PartitionHandler handler = handlers[key.getPartition()];
         return handler.publishEvent(key, value);
     }
 
-    public void subscribe(ClientConnection connection, String streamId, long startOffset) {
-        StreamKey key = new StreamKey(streamId, connection.getSenderId(), 0);
-        handlers[key.getPartition()].subscribe(connection, streamId, startOffset);
+    public void subscribe(ClientConnection connection, String channelID, long startOffset) {
+        ChannelKey key = new ChannelKey(channelID, connection.getPeerID(), 0);
+        handlers[key.getPartition()].subscribe(connection, channelID, startOffset);
     }
 
     public void unsubscribe(ClientConnection connection) {

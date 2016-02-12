@@ -8,15 +8,15 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
 import org.trvedata.trvedb.storage.StreamStore;
 
-public class StreamKey {
+public class ChannelKey {
 
-    public static class KeySerializer implements Serializer<StreamKey> {
+    public static class KeySerializer implements Serializer<ChannelKey> {
         @Override
         public void configure(Map<String, ?> configs, boolean isKey) {
         }
 
         @Override
-        public byte[] serialize(String topic, StreamKey data) {
+        public byte[] serialize(String topic, ChannelKey data) {
             return (data == null) ? null : data.getEncoded();
         }
 
@@ -25,14 +25,14 @@ public class StreamKey {
         }
     }
 
-    public static class KeyDeserializer implements Deserializer<StreamKey> {
+    public static class KeyDeserializer implements Deserializer<ChannelKey> {
         @Override
         public void configure(Map<String, ?> configs, boolean isKey) {
         }
 
         @Override
-        public StreamKey deserialize(String topic, byte[] data) {
-            return (data == null) ? null : new StreamKey(data);
+        public ChannelKey deserialize(String topic, byte[] data) {
+            return (data == null) ? null : new ChannelKey(data);
         }
 
         @Override
@@ -41,21 +41,21 @@ public class StreamKey {
     }
 
     private byte[] encoded;
-    private String streamId;
-    private String senderId;
+    private String channelID;
+    private String senderID;
     private int seqNo;
 
-    public StreamKey(String streamId, String senderId, int seqNo) {
+    public ChannelKey(String channelID, String senderID, int seqNo) {
         this.encoded = null;
-        this.streamId = streamId;
-        this.senderId = senderId;
+        this.channelID = channelID;
+        this.senderID = senderID;
         this.seqNo = seqNo;
     }
 
-    public StreamKey(byte[] encoded) {
+    public ChannelKey(byte[] encoded) {
         this.encoded = encoded;
-        this.streamId = null;
-        this.senderId = null;
+        this.channelID = null;
+        this.senderID = null;
         this.seqNo = -1;
     }
 
@@ -64,14 +64,14 @@ public class StreamKey {
         return encoded;
     }
 
-    public String getStreamId() {
+    public String getChannelID() {
         decode();
-        return streamId;
+        return channelID;
     }
 
-    public String getSenderId() {
+    public String getSenderID() {
         decode();
-        return senderId;
+        return senderID;
     }
 
     public int getSeqNo() {
@@ -91,21 +91,21 @@ public class StreamKey {
 
         ByteBuffer buf = ByteBuffer.allocate(53);
         buf.put((byte) 0); // version
-        hexToByteBuffer(buf, streamId, 16);
-        hexToByteBuffer(buf, senderId, 32);
+        hexToByteBuffer(buf, channelID, 16);
+        hexToByteBuffer(buf, senderID, 32);
         buf.putInt(seqNo);
         this.encoded = buf.array();
     }
 
     private void decode() {
-        if (this.streamId != null) return;
+        if (this.channelID != null) return;
 
         ByteBuffer buf = ByteBuffer.wrap(encoded);
         byte version = buf.get();
         if (version != 0) throw new IllegalStateException("Bad version number: " + version);
 
-        this.streamId = byteBufferToHex(buf, 16);
-        this.senderId = byteBufferToHex(buf, 32);
+        this.channelID = byteBufferToHex(buf, 16);
+        this.senderID = byteBufferToHex(buf, 32);
         this.seqNo = buf.getInt();
     }
 
@@ -135,9 +135,9 @@ public class StreamKey {
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (obj == null) return false;
-        if (!(obj instanceof StreamKey)) return false;
+        if (!(obj instanceof ChannelKey)) return false;
         encode();
-        StreamKey other = (StreamKey) obj;
+        ChannelKey other = (ChannelKey) obj;
         if (!Arrays.equals(encoded, other.getEncoded())) return false;
         return true;
     }
@@ -145,6 +145,6 @@ public class StreamKey {
     @Override
     public String toString() {
         decode();
-        return "StreamKey [streamId=" + streamId + ", senderId=" + senderId + ", seqNo=" + seqNo + "]";
+        return "ChannelKey [channelID=" + channelID + ", senderID=" + senderID + ", seqNo=" + seqNo + "]";
     }
 }

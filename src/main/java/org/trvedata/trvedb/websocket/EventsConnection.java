@@ -18,7 +18,7 @@ import org.eclipse.jetty.websocket.api.WriteCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.trvedata.trvedb.Encoding;
-import org.trvedata.trvedb.StreamKey;
+import org.trvedata.trvedb.ChannelKey;
 import org.trvedata.trvedb.avro.ClientToServer;
 import org.trvedata.trvedb.avro.SendMessage;
 import org.trvedata.trvedb.avro.ServerToClient;
@@ -37,14 +37,14 @@ public class EventsConnection extends WebSocketAdapter {
     private static final Logger log = LoggerFactory.getLogger(EventsConnection.class);
     private final StreamStore store;
     private final ConnectionHandle handle;
-    private final String senderId;
+    private final String peerID;
     private final DatumReader<ClientToServer> readFromClient = new SpecificDatumReader<>(ClientToServer.class);
     private final DatumWriter<ServerToClient> writeToClient = new SpecificDatumWriter<>(ServerToClient.class);
 
-    public EventsConnection(StreamStore store, String senderId) {
+    public EventsConnection(StreamStore store, String peerID) {
         this.store = store;
         this.handle = new ConnectionHandle();
-        this.senderId = senderId;
+        this.peerID = peerID;
     }
 
     /**
@@ -53,7 +53,7 @@ public class EventsConnection extends WebSocketAdapter {
     @Override
     public void onWebSocketConnect(Session session) {
         super.onWebSocketConnect(session);
-        log.info("Connection from senderId {}", senderId);
+        log.info("Connection from peer {}", peerID);
     }
 
     /**
@@ -75,8 +75,8 @@ public class EventsConnection extends WebSocketAdapter {
 
         if (request instanceof SendMessage) {
             SendMessage send = (SendMessage) request;
-            StreamKey key = new StreamKey(Encoding.channelID(send.getChannelID()),
-                senderId, send.getSenderSeqNo().intValue());
+            ChannelKey key = new ChannelKey(Encoding.channelID(send.getChannelID()),
+                peerID, send.getSenderSeqNo().intValue());
             store.publishEvent(key, send.getPayload().array());
 
         } else if (request instanceof SubscribeToChannel) {
@@ -94,7 +94,7 @@ public class EventsConnection extends WebSocketAdapter {
     @Override
     public void onWebSocketText(String message) {
         super.onWebSocketText(message);
-        log.info("Received text message from sender {}: {}", senderId, message);
+        log.info("Received text message from peer {}: {}", peerID, message);
     }
 
     /**
@@ -104,7 +104,7 @@ public class EventsConnection extends WebSocketAdapter {
     @Override
     public void onWebSocketClose(int statusCode, String reason) {
         super.onWebSocketClose(statusCode, reason);
-        log.info("Socket for sender {} closed: {}", senderId, Integer.toString(statusCode) + " " + reason);
+        log.info("Socket for peer {} closed: {}", peerID, Integer.toString(statusCode) + " " + reason);
         store.unsubscribe(handle);
     }
 
@@ -121,17 +121,17 @@ public class EventsConnection extends WebSocketAdapter {
 
     /**
      * The handle is given to the storage layer in order to subscribe to
-     * streams. Its methods may be called by any thread.
+     * channels. Its methods may be called by any thread.
      */
     private class ConnectionHandle implements ClientConnection {
         private AtomicInteger inFlightMessages = new AtomicInteger(0);
 
-        public String getSenderId() {
-            return senderId;
+        public String getPeerID() {
+            return peerID;
         }
 
         /**
-         * @see ClientConnection#offerMessage(byte[])
+         * @see ClientConnection#offerMessage(ServerToClient)
          */
         public boolean offerMessage(ServerToClient message) {
             Session session = getSession();

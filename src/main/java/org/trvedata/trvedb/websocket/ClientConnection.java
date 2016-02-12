@@ -4,10 +4,10 @@ import org.trvedata.trvedb.avro.ServerToClient;
 
 /**
  * A handle to a WebSocket connection with a client. This handle is passed to
- * the storage layer in order to subscribe to streams.
+ * the storage layer in order to subscribe to channels.
  */
 public interface ClientConnection {
-    String getSenderId();
+    String getPeerID();
 
     /**
      * Sends a message to the WebSocket client. This method must be

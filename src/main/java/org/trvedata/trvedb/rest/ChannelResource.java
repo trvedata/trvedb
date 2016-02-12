@@ -7,11 +7,11 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import com.google.common.base.Optional;
 
-@Path("/streams")
+@Path("/channels")
 @Produces(MediaType.APPLICATION_JSON)
-public class StreamResource {
+public class ChannelResource {
     @GET
-    public StreamModel getStream(@QueryParam("stream") Optional<String> streamId) {
-        return new StreamModel(streamId.or("00000000000000000000000000000000"));
+    public ChannelModel getChannel(@QueryParam("id") Optional<String> channelID) {
+        return new ChannelModel(channelID.or("00000000000000000000000000000000"));
     }
 }
