@@ -1,7 +1,6 @@
 package org.trvedata.trvedb.websocket;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.avro.io.BinaryDecoder;
@@ -26,6 +25,7 @@ import org.trvedata.trvedb.avro.ClientToServer;
 import org.trvedata.trvedb.avro.SendMessage;
 import org.trvedata.trvedb.avro.ServerToClient;
 import org.trvedata.trvedb.avro.SubscribeToChannel;
+import org.trvedata.trvedb.storage.PublishException;
 import org.trvedata.trvedb.storage.StreamStore;
 
 /**
@@ -64,7 +64,8 @@ public class EventsConnection extends WebSocketAdapter {
      */
     @Override
     public void onWebSocketBinary(byte[] payload, int offset, int len) {
-        super.onWebSocketBinary(payload, offset, len);
+        Session session = getSession();
+        if (session == null || !session.isOpen()) return;
 
         BinaryDecoder decoder = DecoderFactory.get().binaryDecoder(payload, offset, len, null);
         Object request;
@@ -72,19 +73,21 @@ public class EventsConnection extends WebSocketAdapter {
             request = readFromClient.read(null, decoder).getMessage();
         } catch (Exception e) {
             log.warn("Failed to decode message from client", e);
-            Session session = getSession();
-            if (session != null && session.isOpen()) {
-                session.close(StatusCode.BAD_PAYLOAD, "Could not parse frame");
-            }
+            session.close(StatusCode.BAD_PAYLOAD, "Could not parse frame");
             return;
         }
 
-        if (request instanceof SendMessage) {
-            sendMessageRequest((SendMessage) request);
-        } else if (request instanceof SubscribeToChannel) {
-            subscribeRequest((SubscribeToChannel) request);
-        } else {
-            throw new IllegalStateException("Unknown request type: " + request.getClass().getName());
+        try {
+            if (request instanceof SendMessage) {
+                sendMessageRequest((SendMessage) request);
+            } else if (request instanceof SubscribeToChannel) {
+                subscribeRequest((SubscribeToChannel) request);
+            } else {
+                throw new IllegalStateException("Unknown request type: " + request.getClass().getName());
+            }
+        } catch (Exception e) {
+            log.info("Failed to publish message", e);
+            session.close(StatusCode.SERVER_ERROR, "Internal server error");
         }
     }
 
@@ -134,6 +137,12 @@ public class EventsConnection extends WebSocketAdapter {
                 peerID, send.getSenderSeqNo().intValue());
             store.publishEvent(key, send.getPayload().array());
 
+        } catch (PublishException e) {
+            log.info("SendMessage request refused", e);
+            if (!handle.offerMessage(e.messageToClient())) {
+                session.close(StatusCode.SERVER_ERROR, "Internal server error");
+            }
+
         } catch (TimeoutException | BufferExhaustedException e) {
             // The Kafka producer has a fixed-size buffer of messages being sent. Normally,
             // if buffer space is available, the send request returns immediately and is
@@ -142,7 +151,7 @@ public class EventsConnection extends WebSocketAdapter {
             // blocking. The maximum blocking time is configured to be fairly short. If it
             // is exceeded, TimeoutException is thrown to indicate that the producer is
             // overloaded. To shed load, close connection and ask the client to back off.
-            log.warn("Failed to publish message to Kafka", e);
+            log.warn("Kafka producer buffer is full", e);
             session.close(StatusCode.TRY_AGAIN_LATER, "SendMessage request failed due to server overload");
         }
     }

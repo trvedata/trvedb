@@ -15,13 +15,15 @@ import org.rocksdb.RocksDBException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Wrapper around a {@link RocksDB} key-value store.
+ */
 public class KeyValueStore implements Closeable {
 
     private static final Logger log = LoggerFactory.getLogger(KeyValueStore.class);
     private final String name;
     private final Path storagePath;
     private final Map<String, ColumnFamily<?, ?>> columnFamilies = new HashMap<>();
-    private final Map<ColumnFamily<?, ?>, ColumnFamilyHandle> cfHandles = new HashMap<>();
     private DBOptions options;
     private RocksDB db;
     private ColumnFamily<String, String> defaultColumnFamily;
@@ -31,13 +33,26 @@ public class KeyValueStore implements Closeable {
         this.storagePath = storagePath;
     }
 
+    /**
+     * Registers a column family with the database. Each column family has its own
+     * namespace of keys, and its own {@link Serdes}. This method must be called
+     * before the database is opened. After the database is opened, all read/write
+     * access to the database is done via the column family object.
+     */
     public <K,V> ColumnFamily<K,V> addColumnFamily(String name, Serdes<K,V> serdes) {
         if (db != null) {
             throw new IllegalStateException("Cannot addColumnFamily after database is already open");
         }
-        ColumnFamily<K,V> family = new ColumnFamily<>(this, name, serdes);
+        ColumnFamily<K,V> family = new ColumnFamily<>(name, serdes);
         columnFamilies.put(name, family);
         return family;
+    }
+
+    /**
+     * Default column family that always exists.
+     */
+    public ColumnFamily<String, String> defaultColumnFamily() {
+        return defaultColumnFamily;
     }
 
     public void open() throws RocksDBException {
@@ -48,6 +63,7 @@ public class KeyValueStore implements Closeable {
         options = new DBOptions();
         options.setCreateIfMissing(true);
         options.setCreateMissingColumnFamilies(true);
+        //options.setBytesPerSync(1024 * 1024);
 
         List<ColumnFamilyDescriptor> descriptors = new ArrayList<>();
         List<ColumnFamilyHandle> handles = new ArrayList<>();
@@ -66,7 +82,7 @@ public class KeyValueStore implements Closeable {
             throw new IllegalStateException("Unexpected number of column family handles");
         }
         for (int i = 0; i < families.size(); i++) {
-            cfHandles.put(families.get(i), handles.get(i));
+            families.get(i).setDBHandle(db, handles.get(i));
         }
         log.info("Opened database {} at path {}", name, storagePath);
     }
@@ -80,13 +96,5 @@ public class KeyValueStore implements Closeable {
             options = null;
             log.info("Closed database at path {}", storagePath);
         }
-    }
-
-    byte[] get(ColumnFamily<?, ?> columnFamily, byte[] key) throws RocksDBException {
-        return db.get(cfHandles.get(columnFamily), key);
-    }
-
-    void put(ColumnFamily<?, ?> columnFamily, byte[] key, byte[] value) throws RocksDBException {
-        db.put(cfHandles.get(columnFamily), key, value);
     }
 }

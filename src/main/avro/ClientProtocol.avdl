@@ -28,11 +28,18 @@ protocol ClientProtocol {
         bytes payload;
     }
 
+    /** Sent from server to client if the client sent a SendMessage request with
+     * a sequence number that jumped forwards or backwards. */
+    record SendMessageError {
+        ChannelID channelID;
+        long lastKnownSeqNo;
+    }
+
     record ClientToServer {
         union { SendMessage, SubscribeToChannel } message;
     }
 
     record ServerToClient {
-        union { ReceiveMessage } message;
+        union { ReceiveMessage, SendMessageError } message;
     }
 }

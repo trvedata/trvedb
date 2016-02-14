@@ -3,13 +3,11 @@ package org.trvedata.trvedb.storage;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.rocksdb.RocksDB;
 import org.slf4j.Logger;
@@ -74,9 +72,8 @@ public class StreamStore implements Managed {
         for (int i = 0; i < NUM_PARTITIONS; i++) handlers[i].waitForShutdown();
     }
 
-    public Future<RecordMetadata> publishEvent(ChannelKey key, byte[] value) {
-        PartitionHandler handler = handlers[key.getPartition()];
-        return handler.publishEvent(key, value);
+    public void publishEvent(ChannelKey key, byte[] value) throws PublishException {
+        handlers[key.getPartition()].publishEvent(key, value);
     }
 
     public void subscribe(ClientConnection connection, String channelID, long startOffset) {

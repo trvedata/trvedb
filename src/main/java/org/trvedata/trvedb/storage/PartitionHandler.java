@@ -8,7 +8,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,11 +19,11 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.rocksdb.RocksDBException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.trvedata.trvedb.ChannelKey;
@@ -50,7 +49,7 @@ public class PartitionHandler implements Runnable, Managed {
     private final Path storagePath;
     private final Thread thread;
     private Consumer<ChannelKey, byte[]> consumer = null;
-    private ColumnFamily<ChannelKey, byte[]> messageStore = null;
+    private ColumnFamily<ChannelKey, byte[]> messagesByChannelKey = null;
 
     public PartitionHandler(TopicPartition topicPartition, Properties consumerConfig,
                             Producer<ChannelKey, byte[]> producer) {
@@ -117,7 +116,7 @@ public class PartitionHandler implements Runnable, Managed {
     @Override
     public void run() {
         // Ought to call #configure on serializers, but they're no-ops in this case
-        Serdes<ChannelKey, byte[]> messageStoreSerdes = new Serdes<>(new ChannelKey.KeySerializer(),
+        Serdes<ChannelKey, byte[]> channelKeySerdes = new Serdes<>(new ChannelKey.KeySerializer(),
                 new ChannelKey.KeyDeserializer(),
                 new ByteArraySerializer(),
                 new ByteArrayDeserializer());
@@ -127,7 +126,7 @@ public class PartitionHandler implements Runnable, Managed {
             KeyValueStore store = new KeyValueStore(storagePath);
         ) {
             this.consumer = consumer;
-            messageStore = store.addColumnFamily("messages", messageStoreSerdes);
+            messagesByChannelKey = store.addColumnFamily("messages", channelKeySerdes);
             store.open();
             consumer.assign(Arrays.asList(topicPartition));
             consumer.seekToBeginning(topicPartition); // TODO resume from last offset
@@ -135,7 +134,7 @@ public class PartitionHandler implements Runnable, Managed {
             // If we got to this point, consider the thread successfully started up
             startupFuture.complete(null);
 
-            while (!shutdownRequested.get()) {
+            while (!shutdownRequested.get() && !threadFailed.get()) {
                 ConsumerRecords<ChannelKey, byte[]> records = consumer.poll(1000);
                 for (ConsumerRecord<ChannelKey, byte[]> record : records.records(topicPartition)) {
                     Channel channel = getChannel(record.key().getChannelID());
@@ -157,13 +156,35 @@ public class PartitionHandler implements Runnable, Managed {
         }
     }
 
-    public Future<RecordMetadata> publishEvent(ChannelKey key, byte[] value) {
-        // TODO check for duplicates. use a queue and process on handler thread?
-        ProducerRecord<ChannelKey, byte[]> record = new ProducerRecord<>(
-                topicPartition.topic(), topicPartition.partition(), key, value);
-        return producer.send(record);
+    /**
+     * Called by Jetty threads when a request to send a message arrives from a
+     * WebSocket client. Calls back to {@link #sendToKafka(ChannelKey, byte[])}
+     * to do the actual publishing.
+     */
+    public void publishEvent(ChannelKey key, byte[] value) throws PublishException {
+        try {
+            getChannel(key.getChannelID()).publishEvent(key, value);
+        } catch (RocksDBException e) {
+            threadFailed.set(true);
+            startupFuture.completeExceptionally(e);
+            log.error("Storage engine error", e);
+        }
     }
 
+    /**
+     * Publishes a message to the Kafka partition managed by this
+     * {@link PartitionHandler}.
+     */
+    void sendToKafka(ChannelKey key, byte[] value) {
+        ProducerRecord<ChannelKey, byte[]> record = new ProducerRecord<>(
+                topicPartition.topic(), topicPartition.partition(), key, value);
+        producer.send(record);
+    }
+
+    /**
+     * Subscribes a WebSocket client connection to receive messages on a
+     * particular channel.
+     */
     public void subscribe(ClientConnection connection, String channelID, long startOffset) {
         if (!clientSubscriptions.containsKey(connection)) {
             clientSubscriptions.putIfAbsent(connection, ConcurrentHashMap.newKeySet());
@@ -173,6 +194,10 @@ public class PartitionHandler implements Runnable, Managed {
         getChannel(channelID).subscribe(connection, startOffset);
     }
 
+    /**
+     * Unsubscribes a WebSocket client connection from all channels to which
+     * it is subscribed (typically because the connection was closed).
+     */
     public void unsubscribe(ClientConnection connection) {
         Set<String> subscriptions = clientSubscriptions.remove(connection);
         if (subscriptions == null) return;
@@ -182,9 +207,12 @@ public class PartitionHandler implements Runnable, Managed {
         }
     }
 
-    Channel getChannel(String channelID) {
+    /**
+     * Obtains the {@link Channel} object for a particular ID (given as hex string).
+     */
+    private Channel getChannel(String channelID) {
         if (!channels.containsKey(channelID)) {
-            channels.putIfAbsent(channelID, new Channel(channelID, messageStore));
+            channels.putIfAbsent(channelID, new Channel(channelID, this, messagesByChannelKey));
         }
         return channels.get(channelID);
     }
