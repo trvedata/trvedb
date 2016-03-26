@@ -142,28 +142,29 @@ public class Channel {
             ColumnFamily.Pair<ChannelKey, byte[]> lastMsg = getLastMessage(key.getSenderID());
             long lastSeqNo = (lastMsg == null) ? 0 : lastMsg.getKey().getSeqNo();
 
+            // Happy case: sequence number incremented by 1
+            if (key.getSeqNo() == lastSeqNo + 1) return true;
+            log.info("Peer {}: last known seqNo={}, message seqNo={}", key.getSenderID(), lastSeqNo, key.getSeqNo());
+
+            // Server is missing prior messages from the client
             if (key.getSeqNo() > lastSeqNo + 1) {
                 throw new PublishException(avroChannelID, lastSeqNo);
             }
 
-            if (key.getSeqNo() <= lastSeqNo) {
-                byte[] previousPayload;
-                if (key.getSeqNo() == lastSeqNo) {
-                    previousPayload = lastMsg.getValue();
-                } else {
-                    previousPayload = getSeqNoMessage(key.getSenderID(), key.getSeqNo());
-                }
-
-                if (Arrays.equals(value, previousPayload)) {
-                    log.info("Ignoring duplicate message for {}", key);
-                    return false;
-                } else {
-                    throw new PublishException(avroChannelID, lastSeqNo);
-                }
+            // Server has already seen a message with that seqNo, check if it's the same
+            byte[] previousPayload;
+            if (key.getSeqNo() == lastSeqNo) {
+                previousPayload = lastMsg.getValue();
+            } else {
+                previousPayload = getSeqNoMessage(key.getSenderID(), key.getSeqNo());
             }
 
-            // Get here if key.getSeqNo() == lastMsg.getKey().getSeqNo() + 1
-            return true;
+            if (Arrays.equals(value, previousPayload)) {
+                log.info("Ignoring duplicate message for {}", key);
+                return false;
+            } else {
+                throw new PublishException(avroChannelID, lastSeqNo);
+            }
         }
     }
 

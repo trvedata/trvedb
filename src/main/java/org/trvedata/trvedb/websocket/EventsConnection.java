@@ -138,7 +138,7 @@ public class EventsConnection extends WebSocketAdapter {
             store.publishEvent(key, send.getPayload().array());
 
         } catch (PublishException e) {
-            log.info("SendMessage request refused", e);
+            log.info("SendMessage request refused: {}", e.toString());
             if (!handle.offerMessage(e.messageToClient())) {
                 session.close(StatusCode.SERVER_ERROR, "Internal server error");
             }
