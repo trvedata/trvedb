@@ -3,3 +3,7 @@ kafkaTopic: events
 
 server:
   rootPath: /api/
+  applicationConnectors:
+    - type: http
+      port: 8080
+      bindHost: localhost
